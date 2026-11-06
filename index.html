@@ -20,7 +20,8 @@ a-scene{position:fixed!important;inset:0;z-index:1;background:transparent}
 #brand{padding:9px 16px;border-radius:999px;font-weight:700;font-size:14px;letter-spacing:.04em}
 #tr{display:flex;gap:8px}
 #exit,#stickBtn{width:40px;height:40px;border-radius:50%;color:#fff;font-size:18px;cursor:pointer;padding:0}
-#stickBtn{display:none}body.ar #stickBtn{display:block}
+#stepBtn{display:none;height:40px;padding:0 14px;border-radius:999px;color:#fff;font:700 13px "Noto Sans JP",sans-serif;cursor:pointer}
+body.cam #stepBtn{display:block}#stepBtn.off{opacity:.5}
 #bar{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);display:flex;gap:6px;padding:6px;border-radius:999px;width:max-content;max-width:94vw}
 #bar button{display:flex;flex-direction:column;align-items:center;gap:3px;min-width:84px;padding:9px 12px;border:0;border-radius:999px;background:transparent;color:#fff;font:700 12px "Noto Sans JP",sans-serif;opacity:.75;cursor:pointer;transition:.25s}
 #bar button svg{width:22px;height:22px;fill:currentColor}
@@ -52,7 +53,7 @@ body.stick #stick{display:block}
 #intro p{margin:0;max-width:360px;font-size:14px;line-height:1.9;opacity:.85}
 #start{padding:16px 40px;border:0;border-radius:999px;background:linear-gradient(135deg,var(--acc),#ff9f6b);color:var(--ink);font:900 17px "Noto Sans JP",sans-serif;box-shadow:0 10px 34px rgba(255,159,107,.45);cursor:pointer}
 #mode{font-size:12px;opacity:.75;line-height:1.7;max-width:340px}
-#toast{position:absolute;left:14px;right:14px;top:104px;padding:12px 16px;border-radius:16px;font-size:12px;line-height:1.7;background:rgba(160,40,40,.88);opacity:0;visibility:hidden;transition:.3s;pointer-events:none}
+#toast{position:absolute;left:14px;right:14px;top:104px;padding:12px 16px;border-radius:16px;font-size:12px;line-height:1.7;background:rgba(160,40,40,.88);opacity:0;visibility:hidden;transition:.3s;pointer-events:auto}
 #toast.show{opacity:1;visibility:visible}
 </style>
 </head>
@@ -70,9 +71,9 @@ body.stick #stick{display:block}
 <div id="ui">
   <div id="top">
     <div id="brand" class="glass ctrl">🏞 わたしたちのまち AR展</div>
-    <div id="tr"><button id="stickBtn" class="glass ctrl" aria-label="スティック">🕹</button><button id="exit" class="glass ctrl" aria-label="終了">✕</button></div>
+    <div id="tr"><button id="stepBtn" class="glass ctrl">👣 0歩</button><button id="stickBtn" class="glass ctrl" aria-label="スティック">🕹</button><button id="exit" class="glass ctrl" aria-label="終了">✕</button></div>
   </div>
-  <div id="toast"></div>
+  <div id="toast" class="ctrl"></div>
   <div id="hint">歩き回って、気になるポスターをタップ！</div>
   <div id="stickLabel">スティックで移動</div>
   <div id="stick" class="ctrl"><div id="knob"></div></div>
@@ -137,7 +138,13 @@ if (navigator.xr) navigator.xr.isSessionSupported('immersive-ar')
   .then(v => { xrState = v ? '対応（歩き回れます）' : '非対応（ARCore未対応の可能性）'; diag(); })
   .catch(() => { xrState = '確認できません'; diag(); });
 diag();
-function toast(msg){ const t = $('#toast'); t.textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 12000); }
+let toastTm;
+function toast(msg, sticky){
+  const t = $('#toast'); t.textContent = msg + (sticky ? '（タップで閉じる）' : ''); t.classList.add('show');
+  clearTimeout(toastTm); if (!sticky) toastTm = setTimeout(() => t.classList.remove('show'), 12000);
+}
+$('#toast').onclick = () => $('#toast').classList.remove('show');
+function showHint(text){ const h = $('#hint'); h.textContent = text; h.style.animation = 'none'; void h.offsetWidth; h.style.animation = ''; }
 
 // 画像がまだ無いときは、仮のポスターを自動で作る
 function placeholder(p, i){
@@ -257,9 +264,40 @@ stick.addEventListener('pointermove', e => { if (e.pointerId === sid) stickMove(
   if (e.pointerId !== sid) return; sid = null; mv = [0, 0]; knob.style.transform = '';
 }));
 $('#stickBtn').onclick = () => document.body.classList.toggle('stick');
+/* ---------- 歩数連動（加速度センサーで「歩いた」を検知して前に進む） ---------- */
+const STEP_LENGTH = 0.65;     // 1歩で進む距離(m)。大きくすると速く進む
+const STEP_THRESHOLD = 0.9;   // 検知の感度。小さいほど敏感（目安 0.6〜1.5）
+let stepOn = true, steps = 0, base = 9.8, sm = 0, armed = true, lastStep = 0, motionSeen = false;
+const pending = new T.Vector3(), lastHeading = new T.Vector3(0, 0, -1);
+const stepLabel = () => $('#stepBtn').textContent = '👣 ' + (stepOn ? steps + '歩' : 'OFF');
+function doStep(){
+  steps++; stepLabel();
+  if (!scene.camera) return;
+  scene.camera.getWorldDirection(dv); dv.y = 0;                    // 向いている方向へ進む
+  if (dv.length() < .25) dv.copy(lastHeading); else { dv.normalize(); lastHeading.copy(dv); }
+  pending.addScaledVector(dv, STEP_LENGTH);
+}
+function onMotion(e){
+  if (!document.body.classList.contains('cam')) return;
+  const a = e.accelerationIncludingGravity || e.acceleration;
+  if (!a || a.x == null) return;
+  motionSeen = true;
+  const m = Math.hypot(a.x, a.y, a.z);
+  base += (m - base) * 0.02;                                        // ゆっくり追従する基準（重力）
+  sm = sm * 0.6 + (m - base) * 0.4;                                 // ノイズをならす
+  const t = performance.now();
+  if (armed && sm > STEP_THRESHOLD && t - lastStep > 320){ armed = false; lastStep = t; if (stepOn) doStep(); }
+  else if (!armed && sm < STEP_THRESHOLD * .3) armed = true;
+}
+addEventListener('devicemotion', onMotion);
+$('#stepBtn').onclick = () => { stepOn = !stepOn; $('#stepBtn').classList.toggle('off', !stepOn); stepLabel(); };
 let arWatch = null; const wp = new T.Vector3();
 (function loop(t){
   const dt = Math.min((t - last) / 1000, .1); last = t;
+  if (pending.lengthSq() > 1e-6){                    // 1歩ぶんをなめらかに進める
+    const k = Math.min(1, dt * 5);
+    rig.object3D.position.addScaledVector(pending, k); pending.multiplyScalar(1 - k);
+  }
   if ((mv[0] || mv[1]) && scene.camera){
     scene.camera.getWorldDirection(dv); dv.y = 0; dv.normalize();
     rt.set(-dv.z, 0, dv.x);
@@ -287,6 +325,8 @@ async function startCamera(){
     $('#cam').srcObject = s; await $('#cam').play();
   }catch(e){ alert('カメラを使えませんでした。ブラウザのカメラ許可を確認してください。'); }
   document.body.classList.add('cam', 'stick');
+  showHint('実際に歩くと、歩数に合わせて前に進みます（スティックでも移動できます）');
+  setTimeout(() => { if (!motionSeen) toast('モーションセンサーが使えません。スティックで移動してください。', true); }, 4000);
 }
 // WebXRの失敗理由をつかまえる（A-Frame側では失敗が見えないため）
 let xrFail = null;
@@ -314,17 +354,19 @@ scene.addEventListener('enter-vr', () => {              // ARが始まったと�
 $('#start').onclick = async () => {
   const hide = () => $('#intro').classList.add('hide');
   if (isIOS){                                           // iPhone：歩き回りARは不可
-    try{ await DeviceOrientationEvent.requestPermission(); }catch(e){}
+    const reqs = [DeviceOrientationEvent.requestPermission()];
+    if (typeof DeviceMotionEvent !== 'undefined' && DeviceMotionEvent.requestPermission) reqs.push(DeviceMotionEvent.requestPermission());
+    try{ await Promise.all(reqs); }catch(e){}
     await startCamera(); hide(); return;
   }
   if (navigator.xr){                                    // Android：まずARモードに挑戦
     try{ await enterAR(); return; }
     catch(e){
       toast('ARモードを開始できませんでした（' + (e.name || 'Error') + '：' + (e.message || e) + '）。'
-        + 'Chromeを最新版にし、「Google Play 開発者サービス for AR」を入れてから、もう一度お試しください。今回はカメラ＋ジャイロモードで表示します。');
+        + 'Chromeを最新版にし、「Google Play 開発者サービス for AR」を入れてから、もう一度お試しください。今回はカメラ＋ジャイロモードで表示します。', true);
     }
   } else {
-    toast('このブラウザは歩き回りARに対応していません。カメラ＋ジャイロモードで表示します。');
+    toast('このブラウザは歩き回りARに対応していません。カメラ＋ジャイロモードで表示します。', true);
   }
   await startCamera(); hide();
 };
