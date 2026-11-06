@@ -47,7 +47,9 @@ body.cam #pad{display:grid}
 #intro h1{margin:0;font-size:clamp(28px,8vw,44px);font-weight:900;line-height:1.3}
 #intro p{margin:0;max-width:360px;font-size:14px;line-height:1.9;opacity:.85}
 #start{padding:16px 40px;border:0;border-radius:999px;background:linear-gradient(135deg,var(--acc),#ff9f6b);color:var(--ink);font:900 17px "Noto Sans JP",sans-serif;box-shadow:0 10px 34px rgba(255,159,107,.45);cursor:pointer}
-#mode{font-size:12px;opacity:.6}
+#mode{font-size:12px;opacity:.75;line-height:1.7;max-width:340px}
+#toast{position:absolute;left:14px;right:14px;top:64px;padding:12px 16px;border-radius:16px;font-size:12px;line-height:1.7;background:rgba(160,40,40,.88);opacity:0;visibility:hidden;transition:.3s;pointer-events:none}
+#toast.show{opacity:1;visibility:visible}
 </style>
 </head>
 <body>
@@ -66,6 +68,7 @@ body.cam #pad{display:grid}
     <div id="brand" class="glass ctrl">🏞 わたしたちのまち AR展</div>
     <button id="exit" class="glass ctrl" aria-label="終了">✕</button>
   </div>
+  <div id="toast"></div>
   <div id="hint">歩き回って、気になるポスターをタップ！</div>
   <div id="pad">
     <button class="glass ctrl u" data-m="1,0">▲</button>
@@ -122,8 +125,19 @@ const W = 1.5, H = 2.12, Y = 1.6;
 const $ = s => document.querySelector(s);
 const scene = $('a-scene'), stage = $('#stage'), rig = $('#rig');
 const nodes = [];
-let xrOK = false;
-if (navigator.xr) navigator.xr.isSessionSupported('immersive-ar').then(v => xrOK = v).catch(()=>{});
+const isIOS = typeof DeviceOrientationEvent !== 'undefined' && !!DeviceOrientationEvent.requestPermission;
+const inApp = /Line\/|FBAN|FBAV|Instagram|Twitter|MicroMessenger|; wv\)/i.test(navigator.userAgent);
+let xrState = navigator.xr ? '確認中…' : '非対応（このブラウザではWebXRが使えません）';
+function diag(){
+  $('#mode').innerHTML = 'AR判定：' + xrState
+    + (inApp ? '<br>⚠ アプリ内ブラウザです。Chromeで開き直してください' : '')
+    + (window.isSecureContext ? '' : '<br>⚠ https:// のアドレスで開いてください');
+}
+if (navigator.xr) navigator.xr.isSessionSupported('immersive-ar')
+  .then(v => { xrState = v ? '対応（歩き回れます）' : '非対応（ARCore未対応の可能性）'; diag(); })
+  .catch(() => { xrState = '確認できません'; diag(); });
+diag();
+function toast(msg){ const t = $('#toast'); t.textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 12000); }
 
 // 画像がまだ無いときは、仮のポスターを自動で作る
 function placeholder(p, i){
@@ -253,16 +267,25 @@ async function startCamera(){
   document.body.classList.add('cam');
 }
 $('#start').onclick = async () => {
-  $('#intro').classList.add('hide');
-  if (typeof DeviceOrientationEvent !== 'undefined' && DeviceOrientationEvent.requestPermission){   // iPhone
+  const hide = () => $('#intro').classList.add('hide');
+  if (isIOS){                                              // iPhone：歩き回りARは不可
     try{ await DeviceOrientationEvent.requestPermission(); }catch(e){}
-    await startCamera();
-  } else if (xrOK){                                                                                  // Android Chrome
-    try{ await scene.enterAR(); }catch(e){ await startCamera(); }
-  } else { await startCamera(); }
+    await startCamera(); hide(); return;
+  }
+  if (navigator.xr){                                       // Android：まずARモードに挑戦
+    try{
+      await scene.enterAR();
+      if (!scene.is('ar-mode')) throw new Error('ARセッションが始まりませんでした');
+      hide(); return;
+    }catch(e){
+      toast('ARモードを開始できませんでした（' + (e.name || 'Error') + '：' + (e.message || e) + '）。'
+        + 'Chromeを最新版にし、「Google Play 開発者サービス for AR」をインストールしてから、もう一度お試しください。今回はカメラ＋ジャイロモードで表示します。');
+    }
+  } else {
+    toast('このブラウザは歩き回りARに対応していません。カメラ＋ジャイロモードで表示します。');
+  }
+  await startCamera(); hide();
 };
-$('#mode').textContent = '';
-setTimeout(() => $('#mode').textContent = xrOK ? '✓ 歩き回れるARモードで開きます' : 'カメラ＋ジャイロモードで開きます（移動はボタン）', 800);
 scene.addEventListener('exit-vr', () => location.reload());
 $('#exit').onclick = () => scene.is('ar-mode') ? scene.exitVR() : location.reload();
 
