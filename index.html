@@ -138,11 +138,12 @@ const W = 1.5, H = 2.12, Y = 1.6;
 const $ = s => document.querySelector(s);
 const scene = $('a-scene'), stage = $('#stage'), rig = $('#rig');
 const nodes = [];
-const isIOS = typeof DeviceOrientationEvent !== 'undefined' && !!DeviceOrientationEvent.requestPermission;
+// iPhone/iPadの判定（AndroidのChromeにも requestPermission があるため、機能ではなく機種名で判定する）
+const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent) || (/Macintosh/i.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
 const inApp = /Line\/|FBAN|FBAV|Instagram|Twitter|MicroMessenger|; wv\)/i.test(navigator.userAgent);
 let xrState = navigator.xr ? '確認中…' : '非対応（このブラウザではWebXRが使えません）';
 function diag(){
-  $('#mode').innerHTML = 'AR判定：' + xrState + '<br>ビルド番号：7'
+  $('#mode').innerHTML = 'AR判定：' + xrState + '<br>ビルド番号：8'
     + (inApp ? '<br>⚠ アプリ内ブラウザです。Chromeで開き直してください' : '')
     + (window.isSecureContext ? '' : '<br>⚠ https:// のアドレスで開いてください');
 }
