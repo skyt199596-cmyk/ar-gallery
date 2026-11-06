@@ -10,6 +10,8 @@
 :root{--ink:#14172b;--glass:rgba(20,23,43,.62);--line:rgba(255,255,255,.22);--acc:#ffd166;--acc2:#4cc9f0}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;height:100%;background:#0d0f1f;color:#fff;font-family:"Noto Sans JP",system-ui,-apple-system,"Hiragino Sans",Meiryo,sans-serif}
+/* A-Frame標準のVR/ARボタンは使わない（自前のボタンで開始する） */
+.a-enter-vr,.a-enter-ar,.a-orientation-modal{display:none!important}
 #cam{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;display:none}
 body.cam #cam{display:block}
 a-scene{position:fixed!important;inset:0;z-index:1;background:transparent}
@@ -20,13 +22,18 @@ a-scene{position:fixed!important;inset:0;z-index:1;background:transparent}
 #brand{padding:9px 16px;border-radius:999px;font-weight:700;font-size:14px;letter-spacing:.04em}
 #tr{display:flex;gap:8px}
 #exit,#stickBtn{width:40px;height:40px;border-radius:50%;color:#fff;font-size:18px;cursor:pointer;padding:0}
+#modeChip{position:absolute;left:16px;top:58px;font-size:11px;opacity:.9;text-shadow:0 1px 6px #000}
+#side{position:absolute;right:16px;bottom:112px;display:flex;flex-direction:column;gap:10px;align-items:flex-end}
+#side button{padding:12px 16px;border-radius:999px;color:#fff;font:700 13px "Noto Sans JP",sans-serif;cursor:pointer}
+#backBtn{display:none}body.cam #backBtn{display:block}
+#backBtn.on{background:linear-gradient(135deg,var(--acc),#ff9f6b);color:var(--ink);border-color:transparent}
 #stepBtn{display:none;height:40px;padding:0 14px;border-radius:999px;color:#fff;font:700 13px "Noto Sans JP",sans-serif;cursor:pointer}
 body.cam #stepBtn{display:block}#stepBtn.off{opacity:.5}
 #bar{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);display:flex;gap:6px;padding:6px;border-radius:999px;width:max-content;max-width:94vw}
 #bar button{display:flex;flex-direction:column;align-items:center;gap:3px;min-width:84px;padding:9px 12px;border:0;border-radius:999px;background:transparent;color:#fff;font:700 12px "Noto Sans JP",sans-serif;opacity:.75;cursor:pointer;transition:.25s}
 #bar button svg{width:22px;height:22px;fill:currentColor}
 #bar button.on{background:linear-gradient(135deg,var(--acc),#ff9f6b);color:var(--ink);opacity:1}
-#hint{position:absolute;left:0;right:0;top:70px;text-align:center;font-size:12px;opacity:.9;text-shadow:0 1px 6px #000;animation:fade 1s 9s forwards}
+#hint{position:absolute;left:0;right:0;top:84px;text-align:center;font-size:12px;opacity:.9;text-shadow:0 1px 6px #000;animation:fade 1s 9s forwards}
 @keyframes fade{to{opacity:0}}
 #stick{position:absolute;left:22px;bottom:112px;width:132px;height:132px;border-radius:50%;display:none;touch-action:none;background:radial-gradient(circle,rgba(255,255,255,.10) 0 38%,rgba(20,23,43,.55) 39%);border:1.5px solid var(--line);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
 body.stick #stick{display:block}
@@ -53,7 +60,7 @@ body.stick #stick{display:block}
 #intro p{margin:0;max-width:360px;font-size:14px;line-height:1.9;opacity:.85}
 #start{padding:16px 40px;border:0;border-radius:999px;background:linear-gradient(135deg,var(--acc),#ff9f6b);color:var(--ink);font:900 17px "Noto Sans JP",sans-serif;box-shadow:0 10px 34px rgba(255,159,107,.45);cursor:pointer}
 #mode{font-size:12px;opacity:.75;line-height:1.7;max-width:340px}
-#toast{position:absolute;left:14px;right:14px;top:104px;padding:12px 16px;border-radius:16px;font-size:12px;line-height:1.7;background:rgba(160,40,40,.88);opacity:0;visibility:hidden;transition:.3s;pointer-events:auto}
+#toast{position:absolute;left:14px;right:14px;top:118px;padding:12px 16px;border-radius:16px;font-size:12px;line-height:1.7;background:rgba(160,40,40,.88);opacity:0;visibility:hidden;transition:.3s;pointer-events:auto}
 #toast.show{opacity:1;visibility:visible}
 </style>
 </head>
@@ -77,6 +84,11 @@ body.stick #stick{display:block}
   <div id="hint">歩き回って、気になるポスターをタップ！</div>
   <div id="stickLabel">スティックで移動</div>
   <div id="stick" class="ctrl"><div id="knob"></div></div>
+  <div id="modeChip"></div>
+  <div id="side">
+    <button id="backBtn" class="glass ctrl">⇣ 後退</button>
+    <button id="recBtn" class="glass ctrl">🧭 再配置</button>
+  </div>
   <div id="bar" class="glass ctrl">
     <button data-layout="circle" class="on"><svg viewBox="0 0 24 24"><circle cx="12" cy="3.5" r="2.4"/><circle cx="20" cy="9" r="2.4"/><circle cx="17" cy="19" r="2.4"/><circle cx="7" cy="19" r="2.4"/><circle cx="4" cy="9" r="2.4"/></svg>サークル</button>
     <button data-layout="street"><svg viewBox="0 0 24 24"><rect x="3" y="2" width="5" height="5" rx="1"/><rect x="3" y="10" width="5" height="5" rx="1"/><rect x="3" y="18" width="5" height="4" rx="1"/><rect x="16" y="2" width="5" height="5" rx="1"/><rect x="16" y="10" width="5" height="5" rx="1"/><rect x="16" y="18" width="5" height="4" rx="1"/></svg>ストリート</button>
@@ -130,7 +142,7 @@ const isIOS = typeof DeviceOrientationEvent !== 'undefined' && !!DeviceOrientati
 const inApp = /Line\/|FBAN|FBAV|Instagram|Twitter|MicroMessenger|; wv\)/i.test(navigator.userAgent);
 let xrState = navigator.xr ? '確認中…' : '非対応（このブラウザではWebXRが使えません）';
 function diag(){
-  $('#mode').innerHTML = 'AR判定：' + xrState
+  $('#mode').innerHTML = 'AR判定：' + xrState + '<br>ビルド番号：7'
     + (inApp ? '<br>⚠ アプリ内ブラウザです。Chromeで開き直してください' : '')
     + (window.isSecureContext ? '' : '<br>⚠ https:// のアドレスで開いてください');
 }
@@ -267,7 +279,7 @@ $('#stickBtn').onclick = () => document.body.classList.toggle('stick');
 /* ---------- 歩数連動（加速度センサーで「歩いた」を検知して前に進む） ---------- */
 const STEP_LENGTH = 0.65;     // 1歩で進む距離(m)。大きくすると速く進む
 const STEP_THRESHOLD = 0.9;   // 検知の感度。小さいほど敏感（目安 0.6〜1.5）
-let stepOn = true, steps = 0, base = 9.8, sm = 0, armed = true, lastStep = 0, motionSeen = false;
+let stepOn = true, backMode = false, steps = 0, base = 9.8, sm = 0, armed = true, lastStep = 0, motionSeen = false;
 const pending = new T.Vector3(), lastHeading = new T.Vector3(0, 0, -1);
 const stepLabel = () => $('#stepBtn').textContent = '👣 ' + (stepOn ? steps + '歩' : 'OFF');
 function doStep(){
@@ -275,7 +287,7 @@ function doStep(){
   if (!scene.camera) return;
   scene.camera.getWorldDirection(dv); dv.y = 0;                    // 向いている方向へ進む
   if (dv.length() < .25) dv.copy(lastHeading); else { dv.normalize(); lastHeading.copy(dv); }
-  pending.addScaledVector(dv, STEP_LENGTH);
+  pending.addScaledVector(dv, backMode ? -STEP_LENGTH : STEP_LENGTH);
 }
 function onMotion(e){
   if (!document.body.classList.contains('cam')) return;
@@ -292,6 +304,21 @@ function onMotion(e){
 addEventListener('devicemotion', onMotion);
 $('#stepBtn').onclick = () => { stepOn = !stepOn; $('#stepBtn').classList.toggle('off', !stepOn); stepLabel(); };
 let arWatch = null; const wp = new T.Vector3();
+$('#backBtn').onclick = () => {                       // ON中は、歩くと後ろに下がる
+  backMode = !backMode; const b = $('#backBtn');
+  b.classList.toggle('on', backMode); b.textContent = backMode ? '⇣ 後退中' : '⇣ 後退';
+};
+/* ---------- 再配置：いま立っている場所・向いている方向を「ギャラリーの正面」にする ---------- */
+function recenter(instant){
+  if (!scene.camera) return;
+  scene.camera.getWorldPosition(wp); scene.camera.getWorldDirection(dv); dv.y = 0;
+  if (dv.length() < .25) dv.copy(lastHeading); else dv.normalize();
+  const yaw = Math.atan2(-dv.x, -dv.z) * 180 / Math.PI;
+  if (instant){ stage.object3D.position.set(wp.x, 0, wp.z); stage.object3D.rotation.y = yaw * Math.PI / 180; }
+  else moveTo(stage, wp.x, 0, wp.z, yaw);
+}
+$('#recBtn').onclick = () => { recenter(false); toast('いま向いている方向を正面に、ギャラリーを置き直しました'); };
+const setMode = t => $('#modeChip').textContent = t;
 (function loop(t){
   const dt = Math.min((t - last) / 1000, .1); last = t;
   if (pending.lengthSq() > 1e-6){                    // 1歩ぶんをなめらかに進める
@@ -326,6 +353,7 @@ async function startCamera(){
   }catch(e){ alert('カメラを使えませんでした。ブラウザのカメラ許可を確認してください。'); }
   document.body.classList.add('cam', 'stick');
   showHint('実際に歩くと、歩数に合わせて前に進みます（スティックでも移動できます）');
+  setTimeout(() => recenter(true), 700);               // 最初に向いている方向を正面にする
   setTimeout(() => { if (!motionSeen) toast('モーションセンサーが使えません。スティックで移動してください。', true); }, 4000);
 }
 // WebXRの失敗理由をつかまえる（A-Frame側では失敗が見えないため）
@@ -350,6 +378,8 @@ scene.addEventListener('enter-vr', () => {              // ARが始まったと�
   $('#camEl').object3D.position.set(0, 0, 0);           // 目の高さはスマホの位置で決まる
   rig.object3D.position.set(0, 1.4, 0);                 // 床からの目の高さの目安(m)
   arWatch = {t0: performance.now(), p0: null, max: 0};
+  setMode('● ARモード（位置追跡あり）');
+  setTimeout(() => recenter(true), 1500);
 });
 $('#start').onclick = async () => {
   const hide = () => $('#intro').classList.add('hide');
@@ -357,15 +387,18 @@ $('#start').onclick = async () => {
     const reqs = [DeviceOrientationEvent.requestPermission()];
     if (typeof DeviceMotionEvent !== 'undefined' && DeviceMotionEvent.requestPermission) reqs.push(DeviceMotionEvent.requestPermission());
     try{ await Promise.all(reqs); }catch(e){}
+    setMode('● カメラ＋センサーモード（iPhoneはAR非対応）');
     await startCamera(); hide(); return;
   }
   if (navigator.xr){                                    // Android：まずARモードに挑戦
     try{ await enterAR(); return; }
     catch(e){
+      setMode('● カメラ＋センサーモード（AR開始に失敗）');
       toast('ARモードを開始できませんでした（' + (e.name || 'Error') + '：' + (e.message || e) + '）。'
         + 'Chromeを最新版にし、「Google Play 開発者サービス for AR」を入れてから、もう一度お試しください。今回はカメラ＋ジャイロモードで表示します。', true);
     }
   } else {
+    setMode('● カメラ＋センサーモード（このブラウザはAR非対応）');
     toast('このブラウザは歩き回りARに対応していません。カメラ＋ジャイロモードで表示します。', true);
   }
   await startCamera(); hide();
